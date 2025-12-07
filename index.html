@@ -141,7 +141,7 @@ submitBtn.addEventListener('click', async ()=>{
 // ===== Spider Bot Dashboard =====
 function initSpiderBot(userID){
   console.log("User ID:", userID); // يمكنك استخدامه في التوقعات
-  const ws=new WebSocket("wss://thanos-icucrashaiwebsocketvaule.onrender.com/");
+  const ws=new WebSocket("https://thanos-icucrashaiwebsocketvaule.onrender.com/");
   const circleBox=document.getElementById("circleBox");
   const ping=document.getElementById('pingSound');
   const predictionValues=[];
@@ -206,3 +206,4 @@ function initSpiderBot(userID){
 
 </body>
 </html>
+
