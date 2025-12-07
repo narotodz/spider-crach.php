@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<title>SPIDER BOT - Admin Panel</title>
+<link href="https://fonts.googleapis.com/css2?family=Cairo:wght@600;800&display=swap" rel="stylesheet">
+<style>
+body {margin:0;padding:0;font-family:'Cairo',sans-serif;background:#0a0a0a;color:white;display:flex;flex-direction:column;align-items:center;min-height:100vh;}
+.container {background:rgba(0,0,0,0.85);padding:30px;border-radius:15px;margin-top:50px;width:90%;max-width:600px;text-align:center;}
+input, select {width:100%;padding:12px;margin:10px 0;border-radius:8px;border:none;font-size:16px;box-sizing:border-box;}
+button {padding:12px 20px;margin-top:10px;border:none;border-radius:8px;background:#ff3c00;color:white;font-size:16px;cursor:pointer;transition:0.3s;}
+button:hover {background:#e23200;}
+table {width:100%;border-collapse:collapse;margin-top:20px;}
+th, td {border:1px solid #555;padding:10px;text-align:center;}
+th {background:#222;}
+tr:nth-child(even){background:#111;}
+.error {color:#ff6b6b;}
+.success {color:#4ef76f;}
+.hidden {display:none;}
+</style>
+</head>
+<body>
+
+<div class="container" id="loginPasswordContainer">
+  <h2>أدخل كلمة مرور الأدمن</h2>
+  <input type="password" id="adminPassword" placeholder="كلمة المرور">
+  <button id="loginBtn">دخول</button>
+  <div class="error" id="loginError"></div>
+</div>
+
+<div class="container hidden" id="adminPanel">
+  <h2>لوحة تحكم الأدمن - SPIDER BOT</h2>
+  <input type="text" id="newCodeInput" placeholder="عدد الأكواد الجديدة">
+  <select id="validitySelect">
+    <option value="1">1 يوم</option>
+    <option value="3">3 أيام</option>
+    <option value="7">7 أيام</option>
+    <option value="30">30 يوم</option>
+  </select>
+  <button id="generateBtn">إنشاء أكواد</button>
+  <div class="success" id="generateSuccess"></div>
+  <div class="error" id="generateError"></div>
+
+  <table id="codesTable">
+    <thead>
+      <tr>
+        <th>الكود</th>
+        <th>حالة الكود</th>
+        <th>صلاحيته</th>
+        <th>إجراءات</th>
+      </tr>
+    </thead>
+    <tbody></tbody>
+  </table>
+</div>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-app.js";
+import { getFirestore, collection, addDoc, getDocs, doc, deleteDoc } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore.js";
+
+// Firebase Config
+const firebaseConfig = {
+  apiKey: "AIzaSyBIwo_5BOqc1P9CO1l3054Gc3S9h1vqHmY",
+  authDomain: "codesspider-4ba2b.firebaseapp.com",
+  projectId: "codesspider-4ba2b",
+  storageBucket: "codesspider-4ba2b.appspot.com",
+  messagingSenderId: "20155738358",
+  appId: "1:20155738358:web:115ab5d0de395a21e824d7"
+};
+const app = initializeApp(firebaseConfig);
+const db = getFirestore(app);
+
+// ===== Admin Password Login =====
+const loginPasswordContainer = document.getElementById('loginPasswordContainer');
+const adminPanel = document.getElementById('adminPanel');
+const loginBtn = document.getElementById('loginBtn');
+const loginError = document.getElementById('loginError');
+
+loginBtn.addEventListener('click', ()=>{
+  const pass = document.getElementById('adminPassword').value;
+  if(pass === "admin123456"){
+    loginPasswordContainer.classList.add('hidden');
+    adminPanel.classList.remove('hidden');
+    loadCodes();
+  } else loginError.textContent = "كلمة المرور خاطئة";
+});
+
+// ===== Generate Random Code =====
+function generateRandomCode(){
+  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+  let code = '';
+  for(let i=0;i<20;i++){
+    code += chars.charAt(Math.floor(Math.random()*chars.length));
+  }
+  // إضافة الشرطات
+  return code.match(/.{1,5}/g).join('-');
+}
+
+// ===== Generate Codes =====
+const generateBtn = document.getElementById('generateBtn');
+const newCodeInput = document.getElementById('newCodeInput');
+const validitySelect = document.getElementById('validitySelect');
+const generateError = document.getElementById('generateError');
+const generateSuccess = document.getElementById('generateSuccess');
+
+generateBtn.addEventListener('click', async ()=>{
+  const count = parseInt(newCodeInput.value);
+  const days = parseInt(validitySelect.value);
+  generateError.textContent=''; generateSuccess.textContent='';
+
+  if(isNaN(count) || count<=0){ generateError.textContent="أدخل عدد صالح"; return; }
+
+  const now = new Date();
+  const validUntil = new Date(now.getTime() + days*24*60*60*1000);
+
+  for(let i=0;i<count;i++){
+    const code = generateRandomCode();
+    try{
+      await addDoc(collection(db,'codes'),{
+        activationCode: code,
+        used: false,
+        createdAt: now.toISOString(),
+        validUntil: validUntil.toISOString()
+      });
+    }catch(err){ console.error(err); generateError.textContent="حدث خطأ أثناء إنشاء الأكواد"; return; }
+  }
+
+  generateSuccess.textContent=`تم إنشاء ${count} أكواد بنجاح`;
+  loadCodes();
+});
+
+// ===== Load Codes from Firebase =====
+const codesTableBody = document.querySelector('#codesTable tbody');
+
+async function loadCodes(){
+  codesTableBody.innerHTML='';
+  try{
+    const snap = await getDocs(collection(db,'codes'));
+    snap.forEach(docSnap=>{
+      const data = docSnap.data();
+      const now = new Date();
+      const expiry = new Date(data.validUntil);
+      let status = data.used ? "مستخدم" : (expiry < now ? "منتهي" : "متاح");
+
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td>${data.activationCode}</td>
+        <td>${status}</td>
+        <td>${expiry.toLocaleString()}</td>
+        <td><button data-id="${docSnap.id}" class="deleteBtn">حذف</button></td>
+      `;
+      codesTableBody.appendChild(tr);
+    });
+
+    // إضافة حدث الحذف
+    document.querySelectorAll('.deleteBtn').forEach(btn=>{
+      btn.addEventListener('click', async ()=>{
+        const id = btn.getAttribute('data-id');
+        if(confirm('هل أنت متأكد من حذف هذا الكود؟')){
+          await deleteDoc(doc(db,'codes',id));
+          loadCodes();
+        }
+      });
+    });
+
+  }catch(err){ console.error(err); }
+}
+
+</script>
+</body>
+</html>
